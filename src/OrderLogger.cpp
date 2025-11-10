@@ -5,9 +5,36 @@
 #include <iomanip>
 #include <ctime>
 #include <cstring>
+#include <cstdlib>
 
 OrderLogger::OrderLogger(const std::string& connectionString)
     : connectionString_(connectionString), conn_(nullptr) {
+    // If connection string is empty, try to build from environment variables
+    if (connectionString_.empty()) {
+        std::ostringstream envConnStr;
+        const char* host = std::getenv("PGHOST");
+        const char* port = std::getenv("PGPORT");
+        const char* dbname = std::getenv("PGDATABASE");
+        const char* user = std::getenv("PGUSER");
+        const char* password = std::getenv("PGPASSWORD");
+        
+        if (host) envConnStr << "host=" << host << " ";
+        else envConnStr << "host=localhost ";
+        
+        if (port) envConnStr << "port=" << port << " ";
+        else envConnStr << "port=5432 ";
+        
+        if (dbname) envConnStr << "dbname=" << dbname << " ";
+        else envConnStr << "dbname=market ";
+        
+        if (user) envConnStr << "user=" << user << " ";
+        else envConnStr << "user=postgres ";
+        
+        if (password) envConnStr << "password=" << password;
+        else envConnStr << "password=postgres";
+        
+        connectionString_ = envConnStr.str();
+    }
 }
 
 OrderLogger::~OrderLogger() {

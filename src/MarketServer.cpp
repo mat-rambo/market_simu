@@ -11,7 +11,7 @@
 
 MarketServer::MarketServer(int port) 
     : port_(port), serverSocket_(-1), running_(false), 
-      orderLogger_("host=localhost port=5432 dbname=market user=postgres password=postgres") {
+      orderLogger_("") {  // Empty string will use environment variables
     // Initialize order logger
     if (!orderLogger_.initialize()) {
         std::cerr << "Warning: Failed to initialize order logger" << std::endl;
