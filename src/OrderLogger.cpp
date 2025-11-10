@@ -204,38 +204,33 @@ bool OrderLogger::logOrder(const Order& order) {
     std::string sideStr = (order.side == OrderSide::BUY) ? "BUY" : "SELL";
     std::string typeStr = (order.type == OrderType::MARKET) ? "MARKET" : "LIMIT";
     
-    // Use parameterized query for safety
-    std::ostringstream query;
-    query << "INSERT INTO orders (order_id, trader_id, symbol, side, type, "
-          << "price, quantity, filled_quantity, status, timestamp) VALUES ("
-          << "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10) "
-          << "ON CONFLICT (order_id) DO UPDATE SET "
-          << "filled_quantity = EXCLUDED.filled_quantity, "
-          << "status = EXCLUDED.status";
+    // Convert numbers to strings for parameters (must stay alive during query execution)
+    std::string priceStr = std::to_string(order.price);
+    std::string quantityStr = std::to_string(order.quantity);
+    std::string filledStr = std::to_string(order.filledQuantity);
+    std::string timestampStr = std::to_string(timestamp);
     
+    // Build query string (must stay alive during query execution)
+    std::string queryStr = "INSERT INTO orders (order_id, trader_id, symbol, side, type, "
+                          "price, quantity, filled_quantity, status, timestamp) VALUES ("
+                          "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10) "
+                          "ON CONFLICT (order_id) DO UPDATE SET "
+                          "filled_quantity = EXCLUDED.filled_quantity, "
+                          "status = EXCLUDED.status";
+    
+    // Set up parameter values (all strings must remain valid during PQexecParams)
     const char* paramValues[10] = {
         order.orderId.c_str(),
         order.traderId.c_str(),
         order.symbol.c_str(),
         sideStr.c_str(),
         typeStr.c_str(),
-        nullptr, // price
-        nullptr, // quantity
-        nullptr, // filled_quantity
+        priceStr.c_str(),
+        quantityStr.c_str(),
+        filledStr.c_str(),
         statusStr.c_str(),
-        nullptr  // timestamp
+        timestampStr.c_str()
     };
-    
-    // Convert numbers to strings for parameters
-    std::string priceStr = std::to_string(order.price);
-    std::string quantityStr = std::to_string(order.quantity);
-    std::string filledStr = std::to_string(order.filledQuantity);
-    std::string timestampStr = std::to_string(timestamp);
-    
-    paramValues[5] = priceStr.c_str();
-    paramValues[6] = quantityStr.c_str();
-    paramValues[7] = filledStr.c_str();
-    paramValues[9] = timestampStr.c_str();
     
     int paramLengths[10] = {
         static_cast<int>(order.orderId.length()),
@@ -252,12 +247,23 @@ bool OrderLogger::logOrder(const Order& order) {
     
     int paramFormats[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // All text format
     
-    PGresult* res = PQexecParams(conn, query.str().c_str(), 10, nullptr, paramValues, 
+    PGresult* res = PQexecParams(conn, queryStr.c_str(), 10, nullptr, paramValues, 
                                   paramLengths, paramFormats, 0);
+    
+    if (!res) {
+        std::cerr << "Failed to log order: PQexecParams returned NULL - " << PQerrorMessage(conn) << std::endl;
+        return false;
+    }
     
     bool success = (PQresultStatus(res) == PGRES_COMMAND_OK);
     if (!success) {
         std::cerr << "Failed to log order: " << PQerrorMessage(conn) << std::endl;
+        if (PQresultStatus(res) == PGRES_FATAL_ERROR) {
+            // Check if connection is still valid
+            if (PQstatus(conn) != CONNECTION_OK) {
+                std::cerr << "Database connection lost. Reconnection may be needed." << std::endl;
+            }
+        }
     }
     
     PQclear(res);
@@ -289,12 +295,17 @@ bool OrderLogger::logTrade(const Trade& trade) {
         trade.timestamp.time_since_epoch()
     ).count();
     
-    // Use parameterized query for safety
-    std::ostringstream query;
-    query << "INSERT INTO trades (trade_id, order_id_buy, order_id_sell, symbol, "
-          << "buyer_id, seller_id, price, quantity, timestamp) VALUES ("
-          << "$1, $2, $3, $4, $5, $6, $7, $8, $9)";
+    // Convert numbers to strings for parameters (must stay alive during query execution)
+    std::string priceStr = std::to_string(trade.price);
+    std::string quantityStr = std::to_string(trade.quantity);
+    std::string timestampStr = std::to_string(timestamp);
     
+    // Build query string (must stay alive during query execution)
+    std::string queryStr = "INSERT INTO trades (trade_id, order_id_buy, order_id_sell, symbol, "
+                          "buyer_id, seller_id, price, quantity, timestamp) VALUES ("
+                          "$1, $2, $3, $4, $5, $6, $7, $8, $9)";
+    
+    // Set up parameter values (all strings must remain valid during PQexecParams)
     const char* paramValues[9] = {
         trade.tradeId.c_str(),
         trade.buyOrderId.c_str(),
@@ -302,19 +313,10 @@ bool OrderLogger::logTrade(const Trade& trade) {
         trade.symbol.c_str(),
         trade.buyTraderId.c_str(),
         trade.sellTraderId.c_str(),
-        nullptr, // price
-        nullptr, // quantity
-        nullptr  // timestamp
+        priceStr.c_str(),
+        quantityStr.c_str(),
+        timestampStr.c_str()
     };
-    
-    // Convert numbers to strings for parameters
-    std::string priceStr = std::to_string(trade.price);
-    std::string quantityStr = std::to_string(trade.quantity);
-    std::string timestampStr = std::to_string(timestamp);
-    
-    paramValues[6] = priceStr.c_str();
-    paramValues[7] = quantityStr.c_str();
-    paramValues[8] = timestampStr.c_str();
     
     int paramLengths[9] = {
         static_cast<int>(trade.tradeId.length()),
@@ -330,12 +332,23 @@ bool OrderLogger::logTrade(const Trade& trade) {
     
     int paramFormats[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // All text format
     
-    PGresult* res = PQexecParams(conn, query.str().c_str(), 9, nullptr, paramValues, 
+    PGresult* res = PQexecParams(conn, queryStr.c_str(), 9, nullptr, paramValues, 
                                   paramLengths, paramFormats, 0);
+    
+    if (!res) {
+        std::cerr << "Failed to log trade: PQexecParams returned NULL - " << PQerrorMessage(conn) << std::endl;
+        return false;
+    }
     
     bool success = (PQresultStatus(res) == PGRES_COMMAND_OK);
     if (!success) {
         std::cerr << "Failed to log trade: " << PQerrorMessage(conn) << std::endl;
+        if (PQresultStatus(res) == PGRES_FATAL_ERROR) {
+            // Check if connection is still valid
+            if (PQstatus(conn) != CONNECTION_OK) {
+                std::cerr << "Database connection lost. Reconnection may be needed." << std::endl;
+            }
+        }
     }
     
     PQclear(res);
