@@ -30,8 +30,11 @@ OrderLogger::OrderLogger(const std::string& connectionString)
         if (user) envConnStr << "user=" << user << " ";
         else envConnStr << "user=postgres ";
         
-        if (password) envConnStr << "password=" << password;
-        else envConnStr << "password=postgres";
+        if (password) envConnStr << "password=" << password << " ";
+        else envConnStr << "password=postgres ";
+        
+        // Disable SSL for local connections to avoid SSL errors
+        envConnStr << "sslmode=disable";
         
         connectionString_ = envConnStr.str();
     }

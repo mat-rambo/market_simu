@@ -101,7 +101,7 @@ def trader_continuous_trading(host, port, trader_id, duration_seconds=60, order_
         print(f"❌ {trader_id}: Error - {e}")
         return 0
 
-def run_simulation(host='localhost', port=8888, num_traders=100, duration_seconds=60, order_interval=2.0, max_workers=500):
+def run_simulation(host='51.77.193.65', port=8888, num_traders=100, duration_seconds=60, order_interval=2.0, max_workers=20):
     """Run the simulation with multiple traders continuously trading."""
     print("=" * 70)
     print("Market Simulation - Continuous Trading")
@@ -158,14 +158,14 @@ def run_simulation(host='localhost', port=8888, num_traders=100, duration_second
     print(f"⚡ Orders per second: {total_orders/elapsed_time:.1f}")
     print("=" * 70)
     print()
-    print("💡 Check the web interface at http://localhost:8080")
+    print(f"💡 Check the web interface at http://{host}:8080")
     print("   to see all the orders in the orderbooks!")
 
 def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Simulate multiple traders continuously submitting orders')
-    parser.add_argument('--host', default='localhost', help='Market server host (default: localhost)')
+    parser.add_argument('--host', default='51.77.193.65', help='Market server host (default: 51.77.193.65)')
     parser.add_argument('--port', type=int, default=8888, help='Market server port (default: 8888)')
     parser.add_argument('--traders', type=int, default=100, help='Number of traders (default: 100)')
     parser.add_argument('--duration', type=int, default=60, help='Simulation duration in seconds (default: 60)')
