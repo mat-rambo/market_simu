@@ -320,9 +320,21 @@
         let currentSymbol = '';
         const webPort = 8080; // Web server port
         
+        // Auto-detect the host (works for both localhost and VPS)
+        const getApiHost = () => {
+            // Use current hostname and port from window.location
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname;
+            // If accessing via port 8080, use it; otherwise use webPort
+            const currentPort = window.location.port;
+            const apiPort = (currentPort && currentPort === '8080') ? '8080' : 
+                          (currentPort && currentPort !== '') ? currentPort : webPort;
+            return `${protocol}//${hostname}:${apiPort}`;
+        };
+        
         async function loadAvailableSymbols() {
             try {
-                const response = await fetch(`http://localhost:${webPort}/api/orderbooks`);
+                const response = await fetch(`${getApiHost()}/api/orderbooks`);
                 if (response.ok) {
                     const orderbooks = await response.json();
                     const symbolSelect = document.getElementById('symbolSelect');
@@ -393,7 +405,7 @@
         
         async function loadStats() {
             try {
-                const response = await fetch(`http://localhost:${webPort}/api/stats`);
+                const response = await fetch(`${getApiHost()}/api/stats`);
                 if (response.ok) {
                     const data = await response.json();
                     document.getElementById('connectedTraders').textContent = data.connectedTraders || 0;
@@ -440,7 +452,7 @@
             updateStatus('Loading...');
             
             try {
-                const response = await fetch(`http://localhost:${webPort}/api/orderbook/${symbol}`);
+                const response = await fetch(`${getApiHost()}/api/orderbook/${symbol}`);
                 if (!response.ok) {
                     throw new Error('Failed to fetch orderbook');
                 }
