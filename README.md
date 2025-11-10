@@ -27,8 +27,13 @@ A high-performance C++ market simulation server with real-time order matching, t
 
 - C++17 compiler (g++ 7+ or clang++)
 - CMake 3.15+
-- PostgreSQL 12+
+- PostgreSQL 12+ and libpq-dev (PostgreSQL development headers)
 - Python 3.6+ (for scripts)
+
+**Install dependencies (Ubuntu/Debian):**
+```bash
+sudo apt-get install build-essential cmake postgresql postgresql-contrib libpq-dev python3 python3-pip
+```
 
 ### Build
 
