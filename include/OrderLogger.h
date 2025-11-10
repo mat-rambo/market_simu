@@ -3,6 +3,7 @@
 
 #include <string>
 #include <memory>
+#include <mutex>
 #include "Trade.h"
 
 class OrderLogger {
@@ -26,6 +27,7 @@ public:
 private:
     std::string connectionString_;
     void* conn_; // PGconn* (using void* to avoid including libpq-fe.h in header)
+    mutable std::mutex connMutex_; // Protect connection from concurrent access
     
     bool executeQuery(const std::string& query);
     std::string escapeString(const std::string& str);

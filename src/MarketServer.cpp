@@ -8,6 +8,7 @@
 #include <iostream>
 #include <algorithm>
 #include <set>
+#include <errno.h>
 
 MarketServer::MarketServer(int port) 
     : port_(port), serverSocket_(-1), running_(false), 
@@ -34,8 +35,16 @@ MarketServer::MarketServer(int port)
 }
 
 MarketServer::~MarketServer() {
-    stop();
-    orderLogger_.close();
+    try {
+        stop();
+    } catch (...) {
+        // Ignore exceptions during stop
+    }
+    try {
+        orderLogger_.close();
+    } catch (...) {
+        // Ignore exceptions during close
+    }
 }
 
 void MarketServer::start() {
@@ -60,7 +69,21 @@ void MarketServer::start() {
     
     if (bind(serverSocket_, (struct sockaddr*)&address, sizeof(address)) < 0) {
         close(serverSocket_);
-        throw std::runtime_error("Failed to bind socket");
+        if (errno == EADDRINUSE) {
+            std::ostringstream errorMsg;
+            errorMsg << "❌ ERROR: Port " << port_ << " is already in use!\n"
+                     << "   Another server instance is already running on this port.\n"
+                     << "   Please stop the existing server or use a different port.\n"
+                     << "   To find and kill the process using this port, run:\n"
+                     << "   sudo lsof -i :" << port_ << " | grep LISTEN\n"
+                     << "   sudo kill -9 <PID>";
+            throw std::runtime_error(errorMsg.str());
+        } else {
+            std::ostringstream errorMsg;
+            errorMsg << "Failed to bind socket on port " << port_ 
+                     << ": " << strerror(errno) << " (errno: " << errno << ")";
+            throw std::runtime_error(errorMsg.str());
+        }
     }
     
     // Listen

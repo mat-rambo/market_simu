@@ -6,6 +6,7 @@
 #include <ctime>
 #include <cstring>
 #include <cstdlib>
+#include <mutex>
 
 OrderLogger::OrderLogger(const std::string& connectionString)
     : connectionString_(connectionString), conn_(nullptr) {
@@ -41,19 +42,30 @@ OrderLogger::OrderLogger(const std::string& connectionString)
 }
 
 OrderLogger::~OrderLogger() {
-    close();
+    try {
+        close();
+    } catch (...) {
+        // Ignore exceptions in destructor
+    }
 }
 
 bool OrderLogger::initialize() {
-    PGconn* conn = PQconnectdb(connectionString_.c_str());
-    
-    if (PQstatus(conn) != CONNECTION_OK) {
-        std::cerr << "Connection to database failed: " << PQerrorMessage(conn) << std::endl;
-        PQfinish(conn);
-        return false;
-    }
-    
-    conn_ = conn;
+    try {
+        PGconn* conn = PQconnectdb(connectionString_.c_str());
+        
+        if (!conn) {
+            std::cerr << "Connection to database failed: Unable to create connection" << std::endl;
+            return false;
+        }
+        
+        if (PQstatus(conn) != CONNECTION_OK) {
+            std::cerr << "Connection to database failed: " << PQerrorMessage(conn) << std::endl;
+            PQfinish(conn);
+            conn_ = nullptr;
+            return false;
+        }
+        
+        conn_ = conn;
     
     // Create orders table
     std::string createOrdersTable = R"(
@@ -107,9 +119,32 @@ bool OrderLogger::initialize() {
     
     std::cout << "Order logger initialized: Connected to PostgreSQL database" << std::endl;
     return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Exception in initialize: " << e.what() << std::endl;
+        if (conn_) {
+            PGconn* conn = static_cast<PGconn*>(conn_);
+            if (conn) {
+                PQfinish(conn);
+            }
+            conn_ = nullptr;
+        }
+        return false;
+    } catch (...) {
+        std::cerr << "Unknown exception in initialize" << std::endl;
+        if (conn_) {
+            PGconn* conn = static_cast<PGconn*>(conn_);
+            if (conn) {
+                PQfinish(conn);
+            }
+            conn_ = nullptr;
+        }
+        return false;
+    }
 }
 
 std::string OrderLogger::escapeString(const std::string& str) {
+    std::lock_guard<std::mutex> lock(connMutex_);
+    
     if (!conn_) {
         return str;
     }
@@ -130,11 +165,17 @@ std::string OrderLogger::escapeString(const std::string& str) {
 }
 
 bool OrderLogger::logOrder(const Order& order) {
+    std::lock_guard<std::mutex> lock(connMutex_);
+    
     if (!conn_) {
         return false;
     }
     
-    PGconn* conn = static_cast<PGconn*>(conn_);
+    try {
+        PGconn* conn = static_cast<PGconn*>(conn_);
+        if (!conn || PQstatus(conn) != CONNECTION_OK) {
+            return false;
+        }
     
     // Convert timestamp to Unix timestamp
     auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
@@ -221,14 +262,27 @@ bool OrderLogger::logOrder(const Order& order) {
     
     PQclear(res);
     return success;
+    } catch (const std::exception& e) {
+        std::cerr << "Exception in logOrder: " << e.what() << std::endl;
+        return false;
+    } catch (...) {
+        std::cerr << "Unknown exception in logOrder" << std::endl;
+        return false;
+    }
 }
 
 bool OrderLogger::logTrade(const Trade& trade) {
+    std::lock_guard<std::mutex> lock(connMutex_);
+    
     if (!conn_) {
         return false;
     }
     
-    PGconn* conn = static_cast<PGconn*>(conn_);
+    try {
+        PGconn* conn = static_cast<PGconn*>(conn_);
+        if (!conn || PQstatus(conn) != CONNECTION_OK) {
+            return false;
+        }
     
     // Convert timestamp to Unix timestamp
     auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
@@ -286,15 +340,29 @@ bool OrderLogger::logTrade(const Trade& trade) {
     
     PQclear(res);
     return success;
+    } catch (const std::exception& e) {
+        std::cerr << "Exception in logTrade: " << e.what() << std::endl;
+        return false;
+    } catch (...) {
+        std::cerr << "Unknown exception in logTrade" << std::endl;
+        return false;
+    }
 }
 
 bool OrderLogger::executeQuery(const std::string& query) {
+    std::lock_guard<std::mutex> lock(connMutex_);
+    
     if (!conn_) {
         return false;
     }
     
-    PGconn* conn = static_cast<PGconn*>(conn_);
-    PGresult* res = PQexec(conn, query.c_str());
+    try {
+        PGconn* conn = static_cast<PGconn*>(conn_);
+        if (!conn || PQstatus(conn) != CONNECTION_OK) {
+            return false;
+        }
+        
+        PGresult* res = PQexec(conn, query.c_str());
     
     bool success = (PQresultStatus(res) == PGRES_COMMAND_OK || 
                     PQresultStatus(res) == PGRES_TUPLES_OK);
@@ -309,12 +377,34 @@ bool OrderLogger::executeQuery(const std::string& query) {
     
     PQclear(res);
     return success;
+    } catch (const std::exception& e) {
+        std::cerr << "Exception in executeQuery: " << e.what() << std::endl;
+        return false;
+    } catch (...) {
+        std::cerr << "Unknown exception in executeQuery" << std::endl;
+        return false;
+    }
 }
 
 void OrderLogger::close() {
+    std::lock_guard<std::mutex> lock(connMutex_);
+    
     if (conn_) {
-        PGconn* conn = static_cast<PGconn*>(conn_);
-        PQfinish(conn);
+        try {
+            PGconn* conn = static_cast<PGconn*>(conn_);
+            if (conn) {
+                // Cancel any ongoing operations
+                PGcancel* cancel = PQgetCancel(conn);
+                if (cancel) {
+                    char errbuf[256];
+                    PQcancel(cancel, errbuf, sizeof(errbuf));
+                    PQfreeCancel(cancel);
+                }
+                PQfinish(conn);
+            }
+        } catch (...) {
+            // Ignore exceptions during cleanup
+        }
         conn_ = nullptr;
     }
 }

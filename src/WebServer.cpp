@@ -11,6 +11,7 @@
 #include <iostream>
 #include <algorithm>
 #include <fstream>
+#include <errno.h>
 
 WebServer::WebServer(int port, MarketServer* marketServer)
     : port_(port), serverSocket_(-1), running_(false), marketServer_(marketServer) {
@@ -39,7 +40,21 @@ void WebServer::start() {
     
     if (bind(serverSocket_, (struct sockaddr*)&address, sizeof(address)) < 0) {
         close(serverSocket_);
-        throw std::runtime_error("Failed to bind web server socket");
+        if (errno == EADDRINUSE) {
+            std::ostringstream errorMsg;
+            errorMsg << "❌ ERROR: Web server port " << port_ << " is already in use!\n"
+                     << "   Another server instance is already running on this port.\n"
+                     << "   Please stop the existing server or use a different port.\n"
+                     << "   To find and kill the process using this port, run:\n"
+                     << "   sudo lsof -i :" << port_ << " | grep LISTEN\n"
+                     << "   sudo kill -9 <PID>";
+            throw std::runtime_error(errorMsg.str());
+        } else {
+            std::ostringstream errorMsg;
+            errorMsg << "Failed to bind web server socket on port " << port_ 
+                     << ": " << strerror(errno) << " (errno: " << errno << ")";
+            throw std::runtime_error(errorMsg.str());
+        }
     }
     
     if (listen(serverSocket_, 10) < 0) {
