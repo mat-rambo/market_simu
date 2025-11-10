@@ -1,0 +1,27 @@
+[Unit]
+Description=Market Simulation Server
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=market
+Group=market
+WorkingDirectory=/opt/market_simu
+ExecStart=/opt/market_simu/build/market_simulation 8888 8080
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=market-simulation
+
+# Environment variables for database connection
+Environment="PGHOST=localhost"
+Environment="PGPORT=5432"
+Environment="PGDATABASE=market"
+Environment="PGUSER=postgres"
+Environment="PGPASSWORD=postgres"
+
+[Install]
+WantedBy=multi-user.target
+

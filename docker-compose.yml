@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: market_postgres
+    environment:
+      POSTGRES_DB: market
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  market-server:
+    build: .
+    container_name: market_simulation
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8888:8888"  # Market server
+      - "8080:8080"  # Web interface
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=market
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
